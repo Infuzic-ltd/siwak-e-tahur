@@ -5,7 +5,7 @@ import { initNav } from "./nav.js";
 gsap.registerPlugin(ScrollTrigger);
 initNav();
 
-const FRAME_COUNT = 150;
+const FRAME_COUNT = 598;
 const frameUrl = (i) => `/frames/frame_${String(i).padStart(4, "0")}.jpg`;
 
 const canvas = document.getElementById("videoCanvas");
