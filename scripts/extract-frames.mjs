@@ -4,7 +4,7 @@ import ffmpegPath from "ffmpeg-static";
 
 const SOURCE_VIDEO = process.argv[2];
 const OUT_DIR = "public/frames";
-const FPS = 60;
+const FPS = 15;
 const WIDTH = 2560;
 
 if (!SOURCE_VIDEO) {
