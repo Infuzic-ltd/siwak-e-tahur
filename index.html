@@ -21,14 +21,20 @@
       </button>
     </header>
 
-    <div id="loader">
+    <div id="loader" aria-live="polite">
+      <div class="loader-orbit" aria-hidden="true">
+        <span class="loader-dot loader-dot--one"></span>
+        <span class="loader-dot loader-dot--two"></span>
+        <span class="loader-dot loader-dot--three"></span>
+      </div>
+      <div class="loader-brand">Siwak-e-Tahur</div>
       <div class="loader-bar"><div class="loader-fill" id="loaderFill"></div></div>
-      <p id="loaderLabel">Loading 0%</p>
+      <p id="loaderLabel">Preparing nature's rhythm...</p>
     </div>
 
     <main id="app" hidden>
       <section class="scroll-video" id="scrollVideo">
-        <canvas id="videoCanvas"></canvas>
+        <canvas id="videoCanvas" aria-label="Hero animation"></canvas>
         <div class="scroll-video__overlay">
           <h1 class="scroll-video__title" data-reveal="0">Purity, from the Root</h1>
           <p class="scroll-video__caption" data-reveal="1">

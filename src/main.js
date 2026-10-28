@@ -5,8 +5,14 @@ import { initNav } from "./nav.js";
 gsap.registerPlugin(ScrollTrigger);
 initNav();
 
-const FRAME_COUNT = 598;
-const frameUrl = (i) => `/frames/frame_${String(i).padStart(4, "0")}.jpg`;
+const cloudName = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME || "i6w7au57";
+const FRAME_COUNT = 150;
+const PRELOAD_COUNT = 6;
+
+const cloudinaryFrameUrl = (i) =>
+  `https://res.cloudinary.com/${cloudName}/image/upload/q_auto,f_auto/siwak-animation/frame_${String(i).padStart(4, "0")}.jpg`;
+const localFrameUrl = (i) =>
+  `/frames/frame_${String(i).padStart(4, "0")}.jpg`;
 
 const canvas = document.getElementById("videoCanvas");
 const ctx = canvas.getContext("2d");
@@ -14,36 +20,88 @@ const loader = document.getElementById("loader");
 const loaderFill = document.getElementById("loaderFill");
 const loaderLabel = document.getElementById("loaderLabel");
 const app = document.getElementById("app");
+const loaderMessages = [
+  "Preparing nature's rhythm...",
+  "Breathing life into the story...",
+  "Polishing the ritual...",
+  "Almost ready for the first frame...",
+];
 
 const images = new Array(FRAME_COUNT);
 let currentIndex = 0;
+
+function loadImageWithFallback(index) {
+  const img = new Image();
+  img.decoding = "async";
+  img.dataset.fallbackUsed = "false";
+
+  return new Promise((resolve) => {
+    img.onload = () => resolve(img);
+    img.onerror = () => {
+      if (img.dataset.fallbackUsed === "true") {
+        resolve(img);
+        return;
+      }
+
+      img.dataset.fallbackUsed = "true";
+      img.src = localFrameUrl(index);
+    };
+
+    img.src = localFrameUrl(index);
+  });
+}
+
+function ensureFrame(index) {
+  const actualIndex = Math.max(1, Math.min(FRAME_COUNT, index));
+  if (!images[actualIndex - 1]) {
+    const img = new Image();
+    img.decoding = "async";
+    img.dataset.fallbackUsed = "false";
+
+    img.onerror = () => {
+      if (img.dataset.fallbackUsed === "true") return;
+      img.dataset.fallbackUsed = "true";
+      img.src = cloudinaryFrameUrl(actualIndex);
+    };
+
+    img.src = localFrameUrl(actualIndex);
+    images[actualIndex - 1] = img;
+  }
+
+  return images[actualIndex - 1];
+}
+
+function lazyLoadNearbyFrames(current) {
+  for (let offset = -2; offset <= 2; offset += 1) {
+    const targetIndex = current + offset;
+    if (targetIndex < 1 || targetIndex > FRAME_COUNT) continue;
+    if (!images[targetIndex - 1]) {
+      ensureFrame(targetIndex);
+    }
+  }
+}
 
 function loadFrames() {
   let loaded = 0;
   const updateProgress = () => {
     loaded += 1;
-    const pct = Math.round((loaded / FRAME_COUNT) * 100);
+    const pct = Math.min(100, Math.round((loaded / PRELOAD_COUNT) * 100));
     loaderFill.style.width = `${pct}%`;
-    loaderLabel.textContent = `Loading ${pct}%`;
+    const messageIndex = Math.min(
+      loaderMessages.length - 1,
+      Math.floor((pct / 100) * loaderMessages.length)
+    );
+    loaderLabel.textContent = `Loading ${pct}% · ${loaderMessages[messageIndex]}`;
   };
 
-  const promises = [];
-  for (let i = 1; i <= FRAME_COUNT; i += 1) {
-    const img = new Image();
-    const p = new Promise((resolve) => {
-      img.onload = () => {
-        updateProgress();
-        resolve();
-      };
-      img.onerror = () => {
-        updateProgress();
-        resolve();
-      };
-    });
-    img.src = frameUrl(i);
-    images[i - 1] = img;
-    promises.push(p);
-  }
+  const firstBatch = Array.from({ length: PRELOAD_COUNT }, (_, index) => index + 1);
+  const promises = firstBatch.map((index) =>
+    loadImageWithFallback(index).then((img) => {
+      images[index - 1] = img;
+      updateProgress();
+    })
+  );
+
   return Promise.all(promises);
 }
 
@@ -55,7 +113,7 @@ function resizeCanvas() {
 }
 
 function drawFrame(index) {
-  const img = images[index];
+  const img = ensureFrame(index + 1);
   if (!img || !img.complete || img.naturalWidth === 0) return;
   currentIndex = index;
 
@@ -90,6 +148,7 @@ function initScrollAnimation() {
         FRAME_COUNT - 1,
         Math.floor(self.progress * FRAME_COUNT)
       );
+      lazyLoadNearbyFrames(index + 1);
       drawFrame(index);
     },
   });
