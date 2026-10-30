@@ -7,8 +7,8 @@ initNav();
 
 const cloudName = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME || "i6w7au57";
 const FRAME_COUNT = 150;
-const PRELOAD_COUNT = 6;
-const SCROLL_SPEED = 0.75; // lower values = slower animation; 1 = normal; >1 = faster
+const PRELOAD_COUNT = 10;
+const SCROLL_SPEED = 0.5; // lower values = slower animation; 1 = normal; >1 = faster
 
 const cloudinaryFrameUrl = (i) =>
   `https://res.cloudinary.com/${cloudName}/image/upload/q_auto,f_auto/siwak-animation/frame_${String(i).padStart(4, "0")}.jpg`;
