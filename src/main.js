@@ -29,47 +29,73 @@ const loaderMessages = [
 ];
 
 const images = new Array(FRAME_COUNT);
-let currentIndex = 0;
+const frameLoads = new Array(FRAME_COUNT);
+let currentIndex = 0; // frame the scroll position asks for
+let drawnIndex = -1; // frame actually on the canvas (may lag while loading)
+let drawQueued = false;
 
-function loadImageWithFallback(index) {
-  const img = new Image();
-  img.decoding = "async";
-  img.dataset.fallbackUsed = "false";
+const isLoaded = (img) => img && img.complete && img.naturalWidth > 0;
 
-  return new Promise((resolve) => {
-    img.onload = () => resolve(img);
-    img.onerror = () => {
-      if (img.dataset.fallbackUsed === "true") {
-        resolve(img);
-        return;
-      }
-
-      img.dataset.fallbackUsed = "true";
-      img.src = localFrameUrl(index);
-    };
-
-    img.src = localFrameUrl(index);
+function scheduleDraw() {
+  if (drawQueued) return;
+  drawQueued = true;
+  requestAnimationFrame(() => {
+    drawQueued = false;
+    drawFrame(currentIndex);
   });
 }
 
 function ensureFrame(index) {
   const actualIndex = Math.max(1, Math.min(FRAME_COUNT, index));
-  if (!images[actualIndex - 1]) {
+  const slot = actualIndex - 1;
+  if (!images[slot]) {
     const img = new Image();
     img.decoding = "async";
     img.dataset.fallbackUsed = "false";
 
-    img.onerror = () => {
-      if (img.dataset.fallbackUsed === "true") return;
-      img.dataset.fallbackUsed = "true";
-      img.src = cloudinaryFrameUrl(actualIndex);
-    };
+    frameLoads[slot] = new Promise((resolve) => {
+      img.onload = () => {
+        resolve(img);
+        // A frame closer to where the user scrolled just arrived: show it.
+        if (slot <= currentIndex && slot > drawnIndex) scheduleDraw();
+      };
+      img.onerror = () => {
+        if (img.dataset.fallbackUsed === "true") {
+          resolve(img);
+          return;
+        }
+        img.dataset.fallbackUsed = "true";
+        img.src = cloudinaryFrameUrl(actualIndex);
+      };
+    });
 
     img.src = localFrameUrl(actualIndex);
-    images[actualIndex - 1] = img;
+    images[slot] = img;
   }
 
-  return images[actualIndex - 1];
+  return images[slot];
+}
+
+function loadFrame(index) {
+  ensureFrame(index);
+  return frameLoads[Math.max(1, Math.min(FRAME_COUNT, index)) - 1];
+}
+
+function nearestLoadedFrame(index) {
+  for (let i = index; i >= 0; i -= 1) {
+    if (isLoaded(images[i])) return i;
+  }
+  return -1;
+}
+
+function preloadRemainingFrames(concurrency = 4) {
+  let next = PRELOAD_COUNT + 1;
+  const worker = async () => {
+    while (next <= FRAME_COUNT) {
+      await loadFrame(next++);
+    }
+  };
+  for (let i = 0; i < concurrency; i += 1) worker();
 }
 
 function lazyLoadNearbyFrames(current) {
@@ -96,12 +122,7 @@ function loadFrames() {
   };
 
   const firstBatch = Array.from({ length: PRELOAD_COUNT }, (_, index) => index + 1);
-  const promises = firstBatch.map((index) =>
-    loadImageWithFallback(index).then((img) => {
-      images[index - 1] = img;
-      updateProgress();
-    })
-  );
+  const promises = firstBatch.map((index) => loadFrame(index).then(updateProgress));
 
   return Promise.all(promises);
 }
@@ -114,9 +135,14 @@ function resizeCanvas() {
 }
 
 function drawFrame(index) {
-  const img = ensureFrame(index + 1);
-  if (!img || !img.complete || img.naturalWidth === 0) return;
   currentIndex = index;
+  ensureFrame(index + 1);
+
+  // Until the requested frame arrives, show the closest earlier one instead of freezing.
+  const drawIndex = nearestLoadedFrame(index);
+  if (drawIndex === -1) return;
+  const img = images[drawIndex];
+  drawnIndex = drawIndex;
 
   const canvasAspect = canvas.width / canvas.height;
   const imgAspect = img.naturalWidth / img.naturalHeight;
@@ -139,14 +165,16 @@ function drawFrame(index) {
 }
 
 function initScrollAnimation() {
+  // Slow the animation by lengthening the scroll, so every frame is still reached.
+  document.getElementById("scrollVideo").style.setProperty("--scroll-speed", SCROLL_SPEED);
+
   ScrollTrigger.create({
     trigger: "#scrollVideo",
     start: "top top",
     end: "bottom bottom",
     scrub: true,
     onUpdate: (self) => {
-      const progress = Math.min(1, Math.max(0, self.progress * SCROLL_SPEED));
-      const index = Math.min(FRAME_COUNT - 1, Math.floor(progress * FRAME_COUNT));
+      const index = Math.min(FRAME_COUNT - 1, Math.floor(self.progress * FRAME_COUNT));
       lazyLoadNearbyFrames(index + 1);
       drawFrame(index);
     },
@@ -177,6 +205,7 @@ async function init() {
   drawFrame(0);
   initScrollAnimation();
   ScrollTrigger.refresh();
+  preloadRemainingFrames();
 }
 
 init();

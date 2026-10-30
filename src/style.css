@@ -234,7 +234,8 @@ body {
 /* ---------- scroll video section ---------- */
 .scroll-video {
   position: relative;
-  height: 220vh;
+  /* 100vh of sticky canvas + scroll distance; lower --scroll-speed = more scrolling = slower animation */
+  height: calc(100vh + 120vh / var(--scroll-speed, 1));
 }
 
 .scroll-video canvas,
